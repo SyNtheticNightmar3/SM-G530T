@@ -784,6 +784,9 @@ void pagefault_out_of_memory(void)
 {
 	struct zonelist *zonelist;
 
+	if (mem_cgroup_oom_synchronize())
+		return;
+
 	down_read(&oom_sem);
 	zonelist = node_zonelist(first_memory_node, GFP_KERNEL);
 	if (oom_zonelist_trylock(zonelist, GFP_KERNEL)) {
