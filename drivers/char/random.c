@@ -317,14 +317,6 @@ static int random_write_wakeup_thresh = 128;
 static int random_min_urandom_seed = 60;
 
 /*
- * When the input pool goes over trickle_thresh, start dropping most
- * samples to avoid wasting CPU time and reduce lock contention.
- */
-static const int trickle_thresh = (INPUT_POOL_WORDS * 28) << ENTROPY_SHIFT;
-
-static DEFINE_PER_CPU(int, trickle_count);
-
-/*
  * Originally, we used a primitive polynomial of degree .poolwords
  * over GF(2).  The taps for various sizes are defined below.  They
  * were chosen to be evenly spaced except for the last tap, which is 1
@@ -758,10 +750,6 @@ static void add_timer_randomness(struct timer_rand_state *state, unsigned num)
 	long delta, delta2, delta3;
 
 	preempt_disable();
-	/* if over the trickle threshold, use only 1 in 4096 samples */
-	if (ENTROPY_BITS(&input_pool) > trickle_thresh &&
-	    ((__this_cpu_inc_return(trickle_count) - 1) & 0xfff))
-		goto out;
 
 	sample.jiffies = jiffies;
 	sample.cycles = get_cycles();
@@ -803,7 +791,6 @@ static void add_timer_randomness(struct timer_rand_state *state, unsigned num)
 		credit_entropy_bits(&input_pool,
 				    min_t(int, fls(delta>>1), 11));
 	}
-out:
 	preempt_enable();
 }
 
