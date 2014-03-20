@@ -42,9 +42,11 @@ struct cpufreq_interactive_cpuinfo {
 	spinlock_t load_lock; /* protects the next 4 fields */
 	u64 time_in_idle;
 	u64 time_in_idle_timestamp;
+	u64 time_in_iowait;
 	u64 cputime_speedadj;
 	u64 cputime_speedadj_timestamp;
 	u64 last_evaluated_jiffy;
+	unsigned int io_consecutive;
 	struct cpufreq_policy *policy;
 	struct cpufreq_frequency_table *freq_table;
 	spinlock_t target_freq_lock; /*protects target freq */
@@ -129,6 +131,9 @@ struct cpufreq_interactive_tunables {
 	bool use_sched_load;
 	bool use_migration_notif;
 
+	/* Consider IO as busy if consecutive IOs are above this value. */
+	unsigned long io_busy_threshold;
+
 	/*
 	 * Whether to align timer windows across all CPUs. When
 	 * use_sched_load is true, this flag is ignored and windows
@@ -193,6 +198,7 @@ static void cpufreq_interactive_timer_resched(unsigned long cpu)
 		get_cpu_idle_time(smp_processor_id(),
 				  &pcpu->time_in_idle_timestamp,
 				  tunables->io_is_busy);
+	pcpu->time_in_iowait = get_cpu_iowait_time_us(smp_processor_id(), NULL);
 	pcpu->cputime_speedadj = 0;
 	pcpu->cputime_speedadj_timestamp = pcpu->time_in_idle_timestamp;
 	expires = round_to_nw_start(pcpu->last_evaluated_jiffy, tunables);
@@ -235,6 +241,8 @@ static void cpufreq_interactive_timer_start(
 	pcpu->time_in_idle =
 		get_cpu_idle_time(cpu, &pcpu->time_in_idle_timestamp,
 				  tunables->io_is_busy);
+	pcpu->time_in_iowait = get_cpu_iowait_time_us(cpu, NULL);
+	pcpu->io_consecutive = 0;
 	pcpu->cputime_speedadj = 0;
 	pcpu->cputime_speedadj_timestamp = pcpu->time_in_idle_timestamp;
 	spin_unlock_irqrestore(&pcpu->load_lock, flags);
@@ -374,13 +382,32 @@ static u64 update_load(int cpu)
 		pcpu->policy->governor_data;
 	u64 now;
 	u64 now_idle;
+	u64 now_iowait;
 	unsigned int delta_idle;
+	unsigned int delta_iowait;
 	unsigned int delta_time;
+	unsigned int io_consecutive;
 	u64 active_time;
 
 	now_idle = get_cpu_idle_time(cpu, &now, tunables->io_is_busy);
+	now_iowait = get_cpu_iowait_time_us(cpu, NULL);
 	delta_idle = (unsigned int)(now_idle - pcpu->time_in_idle);
+	delta_iowait = (unsigned int)(now_iowait - pcpu->time_in_iowait);
 	delta_time = (unsigned int)(now - pcpu->time_in_idle_timestamp);
+	io_consecutive = pcpu->io_consecutive;
+
+	if (!tunables->io_is_busy) {
+		if (tunables->io_busy_threshold && delta_iowait)
+			io_consecutive =
+				(io_consecutive < tunables->io_busy_threshold) ?
+				io_consecutive + 1 : io_consecutive;
+		else if (io_consecutive)
+			io_consecutive--;
+
+		if (io_consecutive &&
+				(io_consecutive >= tunables->io_busy_threshold))
+			delta_idle -= delta_iowait;
+	}
 
 	if (delta_time <= delta_idle)
 		active_time = 0;
@@ -390,7 +417,9 @@ static u64 update_load(int cpu)
 	pcpu->cputime_speedadj += active_time * pcpu->policy->cur;
 
 	pcpu->time_in_idle = now_idle;
+	pcpu->time_in_iowait = now_iowait;
 	pcpu->time_in_idle_timestamp = now;
+	pcpu->io_consecutive = io_consecutive;
 	return now;
 }
 
@@ -1369,6 +1398,26 @@ static ssize_t store_use_migration_notif(
 	return count;
 }
 
+static ssize_t show_io_busy_threshold(
+		struct cpufreq_interactive_tunables *tunables, char *buf)
+{
+	return sprintf(buf, "%lu\n", tunables->io_busy_threshold);
+}
+
+static ssize_t store_io_busy_threshold(
+		struct cpufreq_interactive_tunables *tunables, const char *buf,
+		size_t count)
+{
+	int ret;
+	unsigned long val;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+	tunables->io_busy_threshold = val;
+	return count;
+}
+
 /*
  * Create show/store routines
  * - sys: One governor instance for complete SYSTEM
@@ -1416,6 +1465,7 @@ show_store_gov_pol_sys(boost);
 store_gov_pol_sys(boostpulse);
 show_store_gov_pol_sys(boostpulse_duration);
 show_store_gov_pol_sys(io_is_busy);
+show_store_gov_pol_sys(io_busy_threshold);
 show_store_gov_pol_sys(use_sched_load);
 show_store_gov_pol_sys(use_migration_notif);
 show_store_gov_pol_sys(max_freq_hysteresis);
@@ -1446,6 +1496,7 @@ gov_sys_pol_attr_rw(timer_slack);
 gov_sys_pol_attr_rw(boost);
 gov_sys_pol_attr_rw(boostpulse_duration);
 gov_sys_pol_attr_rw(io_is_busy);
+gov_sys_pol_attr_rw(io_busy_threshold);
 gov_sys_pol_attr_rw(use_sched_load);
 gov_sys_pol_attr_rw(use_migration_notif);
 gov_sys_pol_attr_rw(max_freq_hysteresis);
@@ -1473,6 +1524,7 @@ static struct attribute *interactive_attributes_gov_sys[] = {
 	&boostpulse_gov_sys.attr,
 	&boostpulse_duration_gov_sys.attr,
 	&io_is_busy_gov_sys.attr,
+	&io_busy_threshold_gov_sys.attr,
 	&use_sched_load_gov_sys.attr,
 	&use_migration_notif_gov_sys.attr,
 	&max_freq_hysteresis_gov_sys.attr,
@@ -1501,6 +1553,7 @@ static struct attribute *interactive_attributes_gov_pol[] = {
 	&boostpulse_gov_pol.attr,
 	&boostpulse_duration_gov_pol.attr,
 	&io_is_busy_gov_pol.attr,
+	&io_busy_threshold_gov_pol.attr,
 	&use_sched_load_gov_pol.attr,
 	&use_migration_notif_gov_pol.attr,
 	&max_freq_hysteresis_gov_pol.attr,
