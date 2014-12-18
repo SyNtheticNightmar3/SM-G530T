@@ -98,8 +98,9 @@ static unsigned long lowmem_deathpending_timeout;
 			pr_info(x);			\
 	} while (0)
 
-#define CACHED_APP_ADJ	9
-#define CACHED_APP_SCORE_ADJ	((CACHED_APP_ADJ * OOM_SCORE_ADJ_MAX) / -OOM_DISABLE)
+#define PREVIOUS_APP_ADJ	7
+#define PREVIOUS_APP_SCORE_ADJ	((PREVIOUS_APP_ADJ * OOM_SCORE_ADJ_MAX) / -OOM_DISABLE)
+#define TIMEOUT_GAP   (1 * HZ)
 
 #if defined(CONFIG_ZSWAP)
 extern u64 zswap_pool_pages;
@@ -256,7 +257,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int ret = 0;
 	short min_score_adj = OOM_SCORE_ADJ_MAX + 1;
 	int minfree = 0;
-	bool zombie_ps = false;
+	bool ignore_zombie_ps = false;
 	int selected_tasksize = 0;
 	short selected_oom_score_adj;
 	int array_size = ARRAY_SIZE(lowmem_adj);
@@ -325,6 +326,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	}
 	selected_oom_score_adj = min_score_adj;
 
+	if (min_score_adj >= PREVIOUS_APP_SCORE_ADJ)
+		ignore_zombie_ps = true;
+
 	rcu_read_lock();
 	for_each_process(tsk) {
 		struct task_struct *p;
@@ -343,10 +347,16 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 				/* give the system time to free up the memory */
 				msleep_interruptible(20);
 				mutex_unlock(&scan_mutex);
-				zombie_ps = true;
-				lowmem_print(2, "process not kill:'%s' (%d), adj %hd, size %d\n",
-					     p->comm, p->pid, oom_score_adj, tasksize);
-				continue;
+				if (ignore_zombie_ps) {
+					lowmem_print(2, "process not kill:'%s' (%d), adj %hd, size %d\n",
+						p->comm, p->pid, p->signal->oom_score_adj, tasksize);
+					continue;
+				} else {
+					lowmem_print(2, "Return not kill:'%s' (%d), adj %hd, size %d\n",
+						p->comm, p->pid, p->signal->oom_score_adj, tasksize);
+					rcu_read_unlock();
+					return 0;
+				}
 			}
 		}
 
@@ -382,12 +392,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
-		if (zombie_ps && (selected_oom_score_adj < CACHED_APP_SCORE_ADJ)) {
-			lowmem_print(2, "Do not kill '%s' (%d), adj %hd, size %d\n",
-			    p->comm, p->pid, oom_score_adj, tasksize);
-			selected = NULL;
-			continue;
-		}
 		lowmem_print(3, "select '%s' (%d), adj %hd, size %d, to kill\n",
 			     p->comm, p->pid, oom_score_adj, tasksize);
 	}
@@ -438,7 +442,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			show_mem_call_notifiers();
 		}
 
-		lowmem_deathpending_timeout = jiffies + HZ;
+		lowmem_deathpending_timeout = jiffies + TIMEOUT_GAP;
 		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
 		rem -= selected_tasksize;
