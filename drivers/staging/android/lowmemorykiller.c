@@ -634,7 +634,12 @@ static int android_oom_handler(struct notifier_block *nb,
 		lowmem_print(1, "oom: send sigkill to %d (%s), adj %d, size %d\n",
 			     selected->pid, selected->comm,
 			     selected_oom_score_adj, selected_tasksize);
-		set_tsk_thread_flag(selected, TIF_MEMDIE);
+		/*
+		 * FIXME: lowmemorykiller shouldn't abuse global OOM killer
+		 * infrastructure. There is no real reason why the selected
+		 * task should have access to the memory reserves.
+		 */
+		mark_tsk_oom_victim(selected);
 		send_sig(SIGKILL, selected, 0);
 		rem -= selected_tasksize;
 		*freed += (unsigned long)selected_tasksize;
