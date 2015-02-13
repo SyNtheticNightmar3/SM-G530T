@@ -152,3 +152,9 @@ static inline int tick_device_is_functional(struct clock_event_device *dev)
 
 int __clockevents_update_freq(struct clock_event_device *dev, u32 freq);
 extern void do_timer(unsigned long ticks);
+
+/*
+ * Timekeeping suspend/resume functions
+ */
+extern int timekeeping_suspend(void);
+extern void timekeeping_resume(void);

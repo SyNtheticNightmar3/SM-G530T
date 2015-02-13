@@ -75,6 +75,9 @@ extern int tick_is_oneshot_available(void);
 extern u64 jiffy_to_sched_clock(u64 *now, u64 *jiffy_sched_clock);
 extern struct tick_device *tick_get_device(int cpu);
 
+extern void tick_freeze(void);
+extern void tick_unfreeze(void);
+
 # ifdef CONFIG_HIGH_RES_TIMERS
 extern int tick_init_highres(void);
 extern int tick_program_event(ktime_t expires, int force);
@@ -128,6 +131,8 @@ static inline struct cpumask *tick_get_broadcast_oneshot_mask(void)
 
 #else /* CONFIG_GENERIC_CLOCKEVENTS */
 static inline void tick_init(void) { }
+static inline void tick_freeze(void) { }
+static inline void tick_unfreeze(void) { }
 static inline void tick_cancel_sched_timer(int cpu) { }
 static inline void tick_clock_notify(void) { }
 static inline int tick_check_oneshot_change(int allow_nohz) { return 0; }
@@ -184,6 +189,5 @@ static inline void tick_nohz_full_kick(void) { }
 static inline void tick_nohz_full_kick_all(void) { }
 static inline void tick_nohz_task_switch(struct task_struct *tsk) { }
 #endif
-
 
 #endif
