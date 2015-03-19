@@ -369,19 +369,16 @@ void __init early_print(const char *str, ...)
 
 static void __init cpuid_init_hwcaps(void)
 {
-	unsigned int divide_instrs;
+	int block;
 
 	if (cpu_architecture() < CPU_ARCH_ARMv7)
 		return;
 
-	divide_instrs = (read_cpuid_ext(CPUID_EXT_ISAR0) & 0x0f000000) >> 24;
-
-	switch (divide_instrs) {
-	case 2:
+	block = cpuid_feature_extract(CPUID_EXT_ISAR0, 24);
+	if (block >= 2)
 		elf_hwcap |= HWCAP_IDIVA;
-	case 1:
+	if (block >= 1)
 		elf_hwcap |= HWCAP_IDIVT;
-	}
 }
 
 static void __init feat_v6_fixup(void)
