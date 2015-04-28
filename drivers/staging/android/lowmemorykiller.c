@@ -631,15 +631,22 @@ static int android_oom_handler(struct notifier_block *nb,
 	}
 #else
 	if (selected) {
-		lowmem_print(1, "oom: send sigkill to %d (%s), adj %d, size %d\n",
-			     selected->pid, selected->comm,
-			     selected_oom_score_adj, selected_tasksize);
+		task_lock(selected);
+		if (!selected->mm) {
+			/* Already exited, cannot do mark_tsk_oom_victim() */
+			task_unlock(selected);
+			goto out;
+		}
 		/*
 		 * FIXME: lowmemorykiller shouldn't abuse global OOM killer
 		 * infrastructure. There is no real reason why the selected
 		 * task should have access to the memory reserves.
 		 */
 		mark_tsk_oom_victim(selected);
+		task_unlock(selected);
+		lowmem_print(1, "oom: send sigkill to %d (%s), adj %d, size %d\n",
+			     selected->pid, selected->comm,
+			     selected_oom_score_adj, selected_tasksize);
 		send_sig(SIGKILL, selected, 0);
 		rem -= selected_tasksize;
 		*freed += (unsigned long)selected_tasksize;
@@ -648,6 +655,7 @@ static int android_oom_handler(struct notifier_block *nb,
 #endif
 	}
 #endif
+out:
 	read_unlock(&tasklist_lock);
 
 	lowmem_print(2, "oom: get memory %lu", *freed);
