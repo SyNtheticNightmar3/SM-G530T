@@ -639,7 +639,7 @@ static int android_oom_handler(struct notifier_block *nb,
 		 * task should have access to the memory reserves.
 		 */
 		if (selected->mm)
-			mark_tsk_oom_victim(selected);
+			mark_oom_victim(selected);
 		task_unlock(selected);
 		lowmem_print(1, "oom: send sigkill to %d (%s), adj %d, size %d\n",
 			     selected->pid, selected->comm,

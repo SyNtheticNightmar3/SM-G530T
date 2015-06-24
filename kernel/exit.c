@@ -505,7 +505,7 @@ static void exit_mm(struct task_struct * tsk)
 	if (mm_released)
 		set_tsk_thread_flag(tsk, TIF_MM_RELEASED);
 	else if (test_thread_flag(TIF_MEMDIE))
-		unmark_oom_victim();
+		exit_oom_victim();
 }
 
 /*
