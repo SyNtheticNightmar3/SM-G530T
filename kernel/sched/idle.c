@@ -134,10 +134,6 @@ static void cpuidle_idle_call(void)
 		 */
 		next_state = cpuidle_select(drv, dev);
 	}
-	/* Fall back to the default arch idle method on errors. */
-	if (next_state < 0)
-		goto use_default;
-
 	/*
 	 * The idle task must be scheduled, it is pointless to
 	 * go to idle, just update no idle residency and get
