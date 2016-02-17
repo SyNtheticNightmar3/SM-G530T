@@ -29,6 +29,7 @@
 #include <linux/mempolicy.h>
 #include <linux/migrate.h>
 #include <linux/task_work.h>
+#include <linux/tick.h>
 #ifdef CONFIG_SCHED_HMP
 #include <linux/proc_fs.h>
 #endif
@@ -4830,22 +4831,36 @@ find_idlest_group(struct sched_domain *sd, struct task_struct *p,
 /*
  * find_idlest_cpu - find the idlest cpu among the cpus in group.
  */
+DECLARE_PER_CPU(struct tick_sched, tick_cpu_sched);
 static int
 find_idlest_cpu(struct sched_group *group, struct task_struct *p, int this_cpu)
 {
 	unsigned long load, min_load = ULONG_MAX;
 	int idlest = -1;
+	int interrupted_idle = -1;
 	int i;
+#ifdef CONFIG_NO_HZ_COMMON
+	struct tick_sched *ts;
+#endif
 
 	/* Traverse only the allowed CPUs */
 	for_each_cpu_and(i, sched_group_cpus(group), tsk_cpus_allowed(p)) {
 		load = weighted_cpuload(i);
-
+#ifdef CONFIG_NO_HZ_COMMON
+		ts = &per_cpu(tick_cpu_sched, i);
+		if (ts->inidle && !ts->idle_active) {
+			/* idle cpu doing irq */
+			interrupted_idle = i;
+		}
+#endif
 		if (load < min_load || (load == min_load && i == this_cpu)) {
 			min_load = load;
 			idlest = i;
 		}
 	}
+
+	if (interrupted_idle != -1)
+		return interrupted_idle;
 
 	return idlest;
 }
