@@ -563,4 +563,6 @@ config MSM_PERFORMANCE
 
 source "drivers/soc/qcom/memshare/Kconfig"
 
+source "drivers/soc/qcom/samsung/Kconfig"
+
 endif # ARCH_MSM

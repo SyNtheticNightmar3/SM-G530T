@@ -264,6 +264,8 @@
 #define   SDHCI_SPEC_200	1
 #define   SDHCI_SPEC_300	2
 
+#define HC_VENDOR_SPEC_PWR_REG 0x1AC
+
 /*
  * End of controller registers.
  */
@@ -316,6 +318,7 @@ struct sdhci_ops {
 	unsigned int	(*get_max_segments)(void);
 	void	(*platform_bus_voting)(struct sdhci_host *host, u32 enable);
 	void    (*disable_data_xfer)(struct sdhci_host *host);
+	void	(*reset_workaround)(struct sdhci_host *host, u32 enable);
 	void	(*dump_vendor_regs)(struct sdhci_host *host);
 	int	(*config_auto_tuning_cmd)(struct sdhci_host *host,
 					  bool enable,

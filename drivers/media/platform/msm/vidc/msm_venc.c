@@ -3567,8 +3567,20 @@ static struct v4l2_ctrl **get_super_cluster(struct msm_vidc_inst *inst,
 	struct v4l2_ctrl **cluster = kmalloc(sizeof(struct v4l2_ctrl *) *
 			NUM_CTRLS, GFP_KERNEL);
 
+/* MMRND_AVRC. Start */
+// Avoid PREVENT
+#if 1
+	if (!size || !cluster || !inst)
+	{
+		if(cluster)
+			kfree(cluster); // PREVENT Resource leak fix
+		return NULL;
+	}
+#else
 	if (!size || !cluster || !inst)
 		return NULL;
+#endif
+/* MMRND_AVRC. End */
 
 	for (c = 0; c < NUM_CTRLS; c++)
 		cluster[sz++] =  inst->ctrls[c];

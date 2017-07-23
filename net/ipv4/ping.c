@@ -154,6 +154,7 @@ void ping_unhash(struct sock *sk)
 	if (sk_hashed(sk)) {
 		write_lock_bh(&ping_table.lock);
 		hlist_nulls_del(&sk->sk_nulls_node);
+		sk_nulls_node_init(&sk->sk_nulls_node);
 		sock_put(sk);
 		isk->inet_num = 0;
 		isk->inet_sport = 0;
@@ -214,6 +215,13 @@ static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident)
 					     &ipv6_hdr(skb)->daddr))
 				continue;
 #endif
+/*
+    net/ping: handle protocol mismatching scenario
+    refer to https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/net/ipv4/ping.c?id=91a0b603469069cdcce4d572b7525ffc9fd352a6
+    Qualcome case ID 02009918
+*/
+		} else {
+			continue;
 		}
 
 		if (sk->sk_bound_dev_if && sk->sk_bound_dev_if != dif)

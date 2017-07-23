@@ -45,7 +45,9 @@
 #include <linux/mm.h>
 #include <linux/mempolicy.h>
 #include <linux/sched.h>
-
+#ifdef CONFIG_RESTART_REASON_SEC_PARAM
+#include <linux/sec_debug.h>
+#endif
 #include <linux/compat.h>
 #include <linux/syscalls.h>
 #include <linux/kprobes.h>
@@ -330,6 +332,9 @@ void kernel_restart_prepare(char *cmd)
 {
 	blocking_notifier_call_chain(&reboot_notifier_list, SYS_RESTART, cmd);
 	system_state = SYSTEM_RESTART;
+#if defined(CONFIG_SEC_GTES_PROJECT)
+	freeze_processes();
+#endif
 	usermodehelper_disable();
 	device_shutdown();
 }
@@ -398,6 +403,9 @@ static void migrate_to_reboot_cpu(void)
  */
 void kernel_restart(char *cmd)
 {
+#ifdef CONFIG_RESTART_REASON_SEC_PARAM
+	sec_param_restart_reason(cmd);
+#endif
 	kernel_restart_prepare(cmd);
 	migrate_to_reboot_cpu();
 	syscore_shutdown();
@@ -415,6 +423,9 @@ static void kernel_shutdown_prepare(enum system_states state)
 	blocking_notifier_call_chain(&reboot_notifier_list,
 		(state == SYSTEM_HALT)?SYS_HALT:SYS_POWER_OFF, NULL);
 	system_state = state;
+#if defined(CONFIG_SEC_GTES_PROJECT)
+	freeze_processes();
+#endif
 	usermodehelper_disable();
 	device_shutdown();
 }
@@ -2187,7 +2198,7 @@ static int prctl_set_vma_anon_name(unsigned long start, unsigned long end,
 			tmp = end;
 
 		/* Here vma->vm_start <= start < tmp <= (end|vma->vm_end). */
-		error = prctl_update_vma_anon_name(vma, &prev, start, end,
+		error = prctl_update_vma_anon_name(vma, &prev, start, tmp,
 				(const char __user *)arg);
 		if (error)
 			return error;

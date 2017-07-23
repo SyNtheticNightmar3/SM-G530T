@@ -525,4 +525,9 @@ config RADIO_SILABS
           Say Y here if you want to use the SiLabs' FM chip
           with I2C as transport.
 
+config RADIO_LNA_CONTROL
+	tristate "LNA chip control of FM radio"
+        depends on RADIO_IRIS
+        default n
+
 endif # RADIO_ADAPTERS

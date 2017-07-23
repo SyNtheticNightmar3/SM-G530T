@@ -38,6 +38,22 @@
 #include <media/radio-iris.h>
 #include <asm/unaligned.h>
 
+#ifdef CONFIG_RADIO_LNA_CONTROL
+#include <linux/of_gpio.h>
+#ifdef CONFIG_RADIO_LNA_CONTROL_WITH_EX_POWER
+#include <linux/regulator/consumer.h>
+#endif
+#endif
+
+#ifdef CONFIG_RADIO_LNA_CONTROL
+#ifdef CONFIG_RADIO_LNA_CONTROL_WITH_EX_POWER
+enum {
+	OFF = 0,
+	ON,
+};
+#endif
+#endif
+
 static unsigned int rds_buf = 100;
 static int oda_agt;
 static int grp_mask;
@@ -73,6 +89,11 @@ struct iris_device {
 	struct completion sync_xfr_start;
 	int tune_req;
 	unsigned int mode;
+
+#ifdef CONFIG_RADIO_LNA_CONTROL
+	int lna_gpio;
+	struct pinctrl *lna_pinctrl;
+#endif
 
 	__u16 pi;
 	__u8 pty;
@@ -120,6 +141,9 @@ struct iris_device {
 	struct hci_fm_data_rd_rsp default_data;
 	struct hci_fm_spur_data spur_data;
 	unsigned char is_station_valid;
+	char is_rds_grp_3A_enabled;
+	char is_ert_enabled;
+	char is_rt_plus_enabled;
 };
 
 static struct video_device *priv_videodev;
@@ -1848,14 +1872,34 @@ static void hci_cc_fm_disable_rsp(struct radio_hci_dev *hdev,
 		iris_q_event(radio, IRIS_EVT_RADIO_DISABLED);
 		radio_hci_req_complete(hdev, status);
 		radio->mode = FM_OFF;
+	       goto handle_rds;
 	} else if (radio->mode == FM_CALIB) {
 		radio_hci_req_complete(hdev, status);
+	       return;
 	} else if ((radio->mode == FM_RECV) || (radio->mode == FM_TRANS)) {
 		iris_q_event(radio, IRIS_EVT_RADIO_DISABLED);
 		radio->mode = FM_OFF;
+	       goto handle_rds;
 	} else if ((radio->mode == FM_TURNING_OFF) && (status != 0)) {
 		radio_hci_req_complete(hdev, status);
+	       goto handle_rds;
 	}
+	handle_rds :
+	radio->g_rds_grp_proc_ps = 0;
+	memset(&radio->rds_grp, 0, sizeof(radio->rds_grp));
+	grp_mask = 0;
+	oda_agt = 0;
+	rt_plus_carrier = -1;
+	ert_carrier = -1;
+	memset(ert_buf, 0, 256);
+	ert_len = 0;
+	c_byt_pair_index = 0;
+	utf_8_flag = 0;
+	rt_ert_flag = 0;
+	formatting_dir = 0;
+	radio->is_ert_enabled = 0;
+	radio->is_rt_plus_enabled = 0;
+	radio->is_rds_grp_3A_enabled = 0;
 }
 
 static void hci_cc_conf_rsp(struct radio_hci_dev *hdev, struct sk_buff *skb)
@@ -2414,6 +2458,9 @@ static inline void hci_ev_tune_status(struct radio_hci_dev *hdev,
 	}
 	memcpy(&radio->fm_st_rsp.station_rsp, &skb->data[0],
 				sizeof(struct hci_ev_tune_status));
+	if (radio->fm_st_rsp.station_rsp.sub_event == AF_JMP_TUNE)
+		iris_q_event(radio, IRIS_EVT_AFJMP);
+	else
 	iris_q_event(radio, IRIS_EVT_TUNE_SUCC);
 
 	for (i = 0; i < IRIS_BUF_MAX; i++) {
@@ -2543,6 +2590,9 @@ static void hci_ev_raw_rds_group_data(struct radio_hci_dev *hdev,
 			(skb->data[index]);
 		temp.rdsBlk[blocknum].rdsMsb =
 			(skb->data[index+1]);
+		temp.rdsBlk[blocknum].blockStatus =
+			(skb->data[RDSGRP_DATA_OFFSET + blocknum +
+			(RDS_BLOCKS_NUM << 1)]);
 		index = index + 2;
 	}
 
@@ -2561,6 +2611,8 @@ static void hci_ev_raw_rds_group_data(struct radio_hci_dev *hdev,
 			 *
 			 * similary for rest grps
 			 */
+			if (!radio->is_ert_enabled)
+				break;
 			mask_bit = (((agt >> 1) << 1) + (agt & 1));
 			oda_agt = (1 << mask_bit);
 			utf_8_flag = (temp.rdsBlk[2].rdsLsb & 1);
@@ -2579,6 +2631,8 @@ static void hci_ev_raw_rds_group_data(struct radio_hci_dev *hdev,
 			 *
 			 * similary for rest grps
 			 */
+			if (!radio->is_rt_plus_enabled)
+				break;
 			mask_bit = (((agt >> 1) << 1) + (agt & 1));
 			oda_agt =  (1 << mask_bit);
 			/*Extract 5th bit of MSB (b7b6b5b4b3b2b1b0)*/
@@ -2594,10 +2648,17 @@ static void hci_ev_raw_rds_group_data(struct radio_hci_dev *hdev,
 		}
 	} else {
 		carrier = gtc;
-		if ((carrier == rt_plus_carrier))
+		if ((carrier == rt_plus_carrier)&&
+			radio->is_rt_plus_enabled) {
 			hci_ev_rt_plus(radio, temp);
-		else if (carrier == ert_carrier)
+		}else if ((carrier == ert_carrier) &&
+			radio->is_ert_enabled) {
 			hci_buff_ert(radio, &temp);
+		}else {
+			iris_q_evt_data(radio, (char *)(&temp),
+									sizeof (struct rds_grp_data), IRIS_BUF_RAW_RDS);
+			iris_q_event(radio, IRIS_EVT_NEW_RAW_RDS);
+		}
 	}
 }
 
@@ -2668,8 +2729,11 @@ static void hci_ev_ert(struct iris_device *radio)
 		data[1] = utf_8_flag;
 		data[2] = formatting_dir;
 		memcpy((data + 3), ert_buf, ert_len);
-		iris_q_evt_data(radio, data, (ert_len + 3), IRIS_BUF_ERT);
+		if (radio->is_ert_enabled) {
+			iris_q_evt_data(radio, data,
+				 (ert_len + 3), IRIS_BUF_ERT);
 		iris_q_event(radio, IRIS_EVT_NEW_ERT);
+		}
 		kfree(data);
 	}
 }
@@ -2680,8 +2744,15 @@ static void hci_ev_rt_plus(struct iris_device *radio,
 	char tag_type1, tag_type2;
 	char *data = NULL;
 	int len = 0;
+    int tags_num = 0;
+    char item_toggle;
+    char item_running;
 	unsigned short int agt;
 
+    item_toggle = EXTRACT_BIT(rds_buf.rdsBlk[1].rdsLsb,
+	                            ITEM_TOGGLE_BIT);
+    item_running = EXTRACT_BIT(rds_buf.rdsBlk[1].rdsLsb,
+                                ITEM_RUNNING_BIT);
 	agt = AGT(rds_buf.rdsBlk[1].rdsLsb);
 	/*right most 3 bits of Lsb of block 2
 	 * and left most 3 bits of Msb of block 3
@@ -2696,22 +2767,27 @@ static void hci_ev_rt_plus(struct iris_device *radio,
 			 << TAG2_MSB_OFFSET) |
 			 (rds_buf.rdsBlk[3].rdsMsb >> TAG2_LSB_OFFSET));
 
-	if (tag_type1 != DUMMY_CLASS)
+	if (tag_type1 != DUMMY_CLASS) {
 		len += RT_PLUS_LEN_1_TAG;
-	if (tag_type2 != DUMMY_CLASS)
+        tags_num++;
+    }
+    if (tag_type2 != DUMMY_CLASS) {
 		len += RT_PLUS_LEN_1_TAG;
-
+        tags_num++;
+    }
 	if (len != 0) {
-		len += 2;
+        len += 4;
 		data = kmalloc(len, GFP_ATOMIC);
 	} else {
 		FMDERR("Len is zero\n");
 		return ;
 	}
 	if (data != NULL) {
-		data[0] = len;
+		data[0] = tags_num;
 		len = 1;
 		data[len++] = rt_ert_flag;
+        data[len++] = item_toggle;
+		data[len++] = item_running;
 		if (tag_type1 != DUMMY_CLASS) {
 			data[len++] = tag_type1;
 			/*start position of tag1
@@ -2750,8 +2826,11 @@ static void hci_ev_rt_plus(struct iris_device *radio,
 			data[len++] = (rds_buf.rdsBlk[3].rdsLsb
 						& TAG2_LEN_MASK) + 1;
 		}
-		iris_q_evt_data(radio, data, len, IRIS_BUF_RT_PLUS);
+		if (radio->is_rt_plus_enabled) {
+			iris_q_evt_data(radio, data,
+				 len, IRIS_BUF_RT_PLUS);
 		iris_q_event(radio,  IRIS_EVT_NEW_RT_PLUS);
+		}
 		kfree(data);
 	} else {
 		FMDERR("memory allocation failed\n");
@@ -3507,6 +3586,19 @@ static int iris_vidioc_g_ctrl(struct file *file, void *priv,
 			ctrl->value |= (cf0 << 24);
 		}
 		break;
+	case V4L2_CID_PRIVATE_SOFT_MUTE_TH:
+		rd.mode = DIG_AUDIO_0_MODE;
+		rd.length = DIG_AUDIO_0_LEN;
+		rd.param_len = 0;
+		rd.param = 0;
+
+		retval = hci_def_data_read(&rd, radio->fm_hdev);
+        if (retval == 0) {
+		ctrl->value = radio->default_data.data[SMUTE_TH_OFFSET];
+		if (ctrl->value > MAX_SOFTMUTE_TH)
+			ctrl->value -= 256;
+        }
+		break;
 	default:
 		retval = -EINVAL;
 		break;
@@ -3778,6 +3870,38 @@ END:
 	return retval;
 }
 
+#ifdef CONFIG_RADIO_LNA_CONTROL
+#ifdef CONFIG_RADIO_LNA_CONTROL_WITH_EX_POWER
+static int Radio_regulator_onoff(struct device *dev, bool onoff)
+{
+	struct regulator *vdd;
+	int ret;
+
+	pr_info("%s %s\n", __func__, (onoff) ? "on" : "off");
+
+	vdd = devm_regulator_get(dev, "iris_fm,vdd");
+	if (IS_ERR(vdd)) {
+		pr_err("%s, cannot get vdd\n", __func__);
+		return -ENOMEM;
+	} else if (!regulator_get_voltage(vdd)) {
+		regulator_set_voltage(vdd, 2700000, 2700000);
+	}
+
+	if (onoff) {
+		ret = regulator_enable(vdd);
+		msleep(20);
+	} else {
+		ret = regulator_disable(vdd);
+		msleep(20);
+	}
+	devm_regulator_put(vdd);
+	msleep(20);
+
+	return 0;
+}
+#endif
+#endif
+
 static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		struct v4l2_control *ctrl)
 {
@@ -3872,6 +3996,10 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				retval = -EINVAL;
 				goto END;
 			}
+#ifdef CONFIG_RADIO_LNA_CONTROL
+			gpio_direction_output(radio->lna_gpio, 1);
+			pr_info("=%s== enable lna RF chip ==\n",__func__);
+#endif
 			radio->mode = FM_RECV_TURNING_ON;
 			retval = hci_cmd(HCI_FM_ENABLE_RECV_CMD,
 							 radio->fm_hdev);
@@ -3881,6 +4009,12 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				radio->mode = FM_OFF;
 				goto END;
 			} else {
+#ifdef CONFIG_RADIO_LNA_CONTROL
+#ifdef CONFIG_RADIO_LNA_CONTROL_WITH_EX_POWER
+				Radio_regulator_onoff(radio->dev, ON);
+				pr_info("=%s== Radio_regulator_on ==\n",__func__);
+#endif
+#endif
 				retval = initialise_recv(radio);
 				if (retval < 0) {
 					FMDERR("Error while initialising");
@@ -3901,6 +4035,10 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				retval = -EINVAL;
 				goto END;
 			}
+#ifdef CONFIG_RADIO_LNA_CONTROL
+			gpio_direction_output(radio->lna_gpio, 1);
+			pr_info("=%s== enable lna RF chip ==\n",__func__);
+#endif
 			radio->mode = FM_TRANS_TURNING_ON;
 			retval = hci_cmd(HCI_FM_ENABLE_TRANS_CMD,
 							 radio->fm_hdev);
@@ -3926,6 +4064,12 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			}
 			break;
 		case FM_OFF:
+#ifdef CONFIG_RADIO_LNA_CONTROL
+#ifdef CONFIG_RADIO_LNA_CONTROL_WITH_EX_POWER
+			Radio_regulator_onoff(radio->dev, OFF);
+			pr_info("=%s== Radio_regulator_off ==\n",__func__);
+#endif
+#endif
 			radio->spur_table_size = 0;
 			switch (radio->mode) {
 			case FM_RECV:
@@ -3938,6 +4082,10 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					radio->mode = FM_RECV;
 					goto END;
 				}
+#ifdef CONFIG_RADIO_LNA_CONTROL
+				gpio_direction_output(radio->lna_gpio, 0);
+				pr_info("=%s== disable lna RF chip ==\n",__func__);
+#endif
 				break;
 			case FM_TRANS:
 				radio->mode = FM_TURNING_OFF;
@@ -3950,6 +4098,10 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					radio->mode = FM_TRANS;
 					goto END;
 				}
+#ifdef CONFIG_RADIO_LNA_CONTROL
+				gpio_direction_output(radio->lna_gpio, 0);
+				pr_info("=%s== disable lna RF chip ==\n",__func__);
+#endif
 				break;
 			default:
 				retval = -EINVAL;
@@ -4163,6 +4315,75 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			radio->rds_grp.rds_grp_enable_mask = saved_val;
 			goto END;
 		}
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_RT:
+		if ((ctrl->value < 0) || (ctrl->value > 1))
+			return -EINVAL;
+		saved_val = radio->g_rds_grp_proc_ps;
+		radio->g_rds_grp_proc_ps &= ~(1 << RDS_RT_OFFSET);
+		radio->g_rds_grp_proc_ps |=
+			(ctrl->value << RDS_RT_OFFSET);
+		retval = hci_fm_rds_grps_process(
+				&radio->g_rds_grp_proc_ps,
+				radio->fm_hdev);
+		if (retval < 0) {
+			radio->g_rds_grp_proc_ps = saved_val;
+			FMDERR("error in setting group RT\n");
+			goto END;
+        }
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_PS_SIMPLE:
+		saved_val = radio->g_rds_grp_proc_ps;
+		if ((ctrl->value < 0) || (ctrl->value > 1))
+			return -EINVAL;
+		radio->g_rds_grp_proc_ps &= ~(1 << RDS_PS_SIMPLE_OFFSET);
+		radio->g_rds_grp_proc_ps |=
+			(ctrl->value << RDS_PS_SIMPLE_OFFSET);
+		retval = hci_fm_rds_grps_process(
+				&radio->g_rds_grp_proc_ps,
+				radio->fm_hdev);
+		if (retval < 0) {
+            radio->g_rds_grp_proc_ps = saved_val;
+			FMDERR("error in setting group PS SIMPLE\n");
+			goto END;
+        }
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_3A:
+		saved_val = grp_mask;
+		if ((ctrl->value < 0) || (ctrl->value > 1))
+			return -EINVAL;
+		grp_mask &= ~(1 << RDS_GRP_3A);
+		grp_mask |= (ctrl->value << RDS_GRP_3A);
+		radio->rds_grp.rds_grp_enable_mask = grp_mask;
+		radio->rds_grp.rds_buf_size = 1;
+		radio->rds_grp.en_rds_change_filter = 0;
+		retval = hci_fm_rds_grp(&radio->rds_grp, radio->fm_hdev);
+		if (retval < 0)
+			grp_mask = saved_val;
+		else
+			radio->is_rds_grp_3A_enabled = ctrl->value;
+		if (ctrl->value == 0) {
+			radio->is_rt_plus_enabled = 0;
+			radio->is_ert_enabled = 0;
+		}
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_RT_PLUS:
+		retval = 0;
+		if ((ctrl->value == 1) && (radio->is_rds_grp_3A_enabled == 1))
+			radio->is_rt_plus_enabled = ctrl->value;
+		else if ((ctrl->value == 0))
+			radio->is_rt_plus_enabled = ctrl->value;
+		else
+			retval = -EINVAL;
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_ERT:
+		retval = 0;
+		if ((ctrl->value == 1) && (radio->is_rds_grp_3A_enabled == 1))
+			radio->is_ert_enabled = ctrl->value;
+		else if ((ctrl->value == 0))
+			radio->is_ert_enabled = ctrl->value;
+		else
+			retval = -EINVAL;
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDSGROUP_PROC:
 		saved_val = radio->g_rds_grp_proc_ps;
@@ -4581,7 +4802,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x", retval);
+			FMDERR("Get AF Jump RMSSI Threshold failed %x", retval);
 			goto END;
 		}
 		wrd.mode = FM_RDS_CNFG_MODE;
@@ -4602,7 +4823,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x", retval);
+			FMDERR("Get AF Jump RMSSI SAMPLES failed %x", retval);
 			goto END;
 		}
 		wrd.mode = FM_RDS_CNFG_MODE;
@@ -4622,7 +4843,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x", retval);
+			FMDERR("Get AF Jump RMSSI SAMPLES failed %x", retval);
 			goto END;
 		}
 		wrd.mode = FM_RX_CONFG_MODE;
@@ -4716,6 +4937,54 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		retval = hci_def_data_write(&wrd, radio->fm_hdev);
 		if (retval < 0)
 			FMDERR("set CF0 Threshold failed\n");
+		break;
+	case V4L2_CID_PRIVATE_SOFT_MUTE_TH:
+		rd.mode = DIG_AUDIO_0_MODE;
+		rd.length = DIG_AUDIO_0_LEN;
+		rd.param_len = 0;
+		rd.param = 0;
+
+		retval = hci_def_data_read(&rd, radio->fm_hdev);
+		if (retval < 0) {
+			FMDERR("default data read failed %x", retval);
+			return retval;
+		}
+		wrd.mode = DIG_AUDIO_0_MODE;
+		wrd.length = DIG_AUDIO_0_LEN;
+		memcpy(&wrd.data, &radio->default_data.data,
+				radio->default_data.ret_data_len);
+		wrd.data[SMUTE_TH_OFFSET] = ctrl->value;
+		retval = hci_def_data_write(&wrd, radio->fm_hdev);
+		if (retval < 0)
+			FMDERR("Set Soft mute Threshold failed\n");
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_ALL:
+		if((ctrl->value < 0) || (ctrl->value > 1)) {
+			retval = -EINVAL;
+			break;
+		}
+		if (ctrl->value == 0) {
+			radio->rds_grp.rds_grp_enable_mask = 0;
+		} else {
+			radio->rds_grp.rds_grp_enable_mask = RDS_GRPS_ALL;
+
+			radio->rds_grp.rds_buf_size = 1;
+			radio->rds_grp.en_rds_change_filter = 0;
+			retval = hci_fm_rds_grp(&radio->rds_grp,
+				radio->fm_hdev);
+			if (retval < 0) {
+				FMDERR("error in setting all group mask\n");
+			} else if(ctrl->value == 0){
+				grp_mask = 0;
+				oda_agt = 0;
+				radio->is_rds_grp_3A_enabled = 0;
+				radio->is_rt_plus_enabled = 0;
+				radio->is_ert_enabled = 0;
+			} else {
+				grp_mask = RDS_GRPS_ALL;
+				radio->is_rds_grp_3A_enabled = 1;
+			}
+		}
 		break;
 	case V4L2_CID_PRIVATE_RXREPEATCOUNT:
 		rd.mode = RDS_PS0_XFR_MODE;
@@ -5128,7 +5397,7 @@ static int initialise_recv(struct iris_device *radio)
 		return -EINVAL;
 	}
 
-	radio->mute_mode.soft_mute = CTRL_ON;
+	radio->mute_mode.soft_mute = CTRL_OFF;
 	retval = hci_set_fm_mute_mode(&radio->mute_mode,
 					radio->fm_hdev);
 
@@ -5204,6 +5473,35 @@ static int is_enable_tx_possible(struct iris_device *radio)
 	return retval;
 }
 
+#ifdef CONFIG_RADIO_LNA_CONTROL
+static int fm_lna_pinctrl_configure(struct iris_device *radio, bool active)
+{
+	struct pinctrl_state *set_state;
+	int retval;
+
+	pr_info("%s - active = %d\n", __func__, active);
+	if (active) {
+		set_state = pinctrl_lookup_state(radio->lna_pinctrl, "lna_gpio_active");
+		if (IS_ERR(set_state)) {
+			pr_err("%s: cannot get fm lna pinctrl active state\n", __func__);
+			return PTR_ERR(set_state);
+		}
+	} else {
+		set_state = pinctrl_lookup_state(radio->lna_pinctrl, "lna_gpio_suspend");
+		if (IS_ERR(set_state)) {
+			pr_err("%s: cannot get earjack pinctrl sleep state\n", __func__);
+			return PTR_ERR(set_state);
+		}
+	}
+	retval = pinctrl_select_state(radio->lna_pinctrl, set_state);
+	if (retval) {
+		pr_err("%s: cannot set fm lna pinctrl active state\n", __func__);
+		return retval;
+	}
+	return 0;
+}
+#endif
+
 static const struct v4l2_ioctl_ops iris_ioctl_ops = {
 	.vidioc_querycap              = iris_vidioc_querycap,
 	.vidioc_queryctrl             = iris_vidioc_queryctrl,
@@ -5247,6 +5545,9 @@ static int __init iris_probe(struct platform_device *pdev)
 	int retval;
 	int radio_nr = -1;
 	int i;
+#ifdef CONFIG_RADIO_LNA_CONTROL
+	int ret;
+#endif
 
 	if (!pdev) {
 		FMDERR(": pdev is null\n");
@@ -5332,6 +5633,38 @@ static int __init iris_probe(struct platform_device *pdev)
 			kfree(radio);
 		}
 	}
+
+#ifdef CONFIG_RADIO_LNA_CONTROL
+	radio->lna_gpio = of_get_named_gpio(radio->dev->of_node, "qcom,fm-radio-lna-gpio", 0);
+	if (radio->lna_gpio < 0) {
+		pr_err("%s : can not find the fm-radio-lna-gpio in the dt\n", __func__);
+	} else
+		pr_info("%s : fm-radio-lna-gpio =%d\n", __func__, radio->lna_gpio);
+
+	if(radio->lna_gpio > 0) {
+		ret = gpio_request(radio->lna_gpio, "lna_control");
+		if (ret) {
+			pr_err("%s : gpio_request failed for %d\n",
+				__func__, radio->lna_gpio);
+			gpio_free(radio->lna_gpio);
+		}
+	}
+
+	radio->lna_pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(radio->lna_pinctrl)) {
+		pr_err("%s: Target does not use pinctrl\n", __func__);
+		radio->lna_pinctrl = NULL;
+	}
+
+	if (radio->lna_pinctrl) {
+		ret = fm_lna_pinctrl_configure(radio, true);
+		if (ret)
+			pr_err("%s: cannot set lna pinctrl active state\n", __func__);
+		else
+			pr_info("%s : set lna pinctrl active state\n", __func__);
+	}
+#endif
+
 	return 0;
 }
 
@@ -5350,12 +5683,43 @@ static int iris_remove(struct platform_device *pdev)
 	for (i = 0; i < IRIS_BUF_MAX; i++)
 		kfifo_free(&radio->data_buf[i]);
 
+#ifdef CONFIG_RADIO_LNA_CONTROL
+	gpio_free(radio->lna_gpio);
+#endif
 	kfree(radio);
 
 	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }
+
+#ifdef CONFIG_RADIO_LNA_CONTROL
+#ifdef CONFIG_PM
+static int radio_suspend(struct device *dev)
+{
+	struct iris_device *radio = video_get_drvdata(video_get_dev());
+	if (radio->lna_pinctrl) {
+		int ret = fm_lna_pinctrl_configure(radio, false);
+		if (ret)
+			dev_err(dev, "failed to put the pin in suspend state\n");
+	}
+	return 0;
+}
+
+static int radio_resume(struct device *dev)
+{
+	struct iris_device *radio = video_get_drvdata(video_get_dev());
+	if (radio->lna_pinctrl) {
+		int ret = fm_lna_pinctrl_configure(radio, true);
+		if (ret)
+			dev_err(dev, "failed to put the pin in resume state\n");
+	}
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(radio_pm_ops, radio_suspend, radio_resume);
+#endif
+#endif
 
 static const struct of_device_id iris_fm_match[] = {
 	{.compatible = "qcom,iris_fm"},
@@ -5367,6 +5731,11 @@ static struct platform_driver iris_driver = {
 		.owner  = THIS_MODULE,
 		.name   = "iris_fm",
 		.of_match_table = iris_fm_match,
+#ifdef CONFIG_RADIO_LNA_CONTROL
+#ifdef CONFIG_PM
+		.pm	= &radio_pm_ops,
+#endif
+#endif
 	},
 	.remove = iris_remove,
 };
