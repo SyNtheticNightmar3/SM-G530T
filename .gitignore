@@ -19,6 +19,7 @@
 *.so.dbg
 *.mod.c
 *.i
+*.log
 *.lst
 *.symtypes
 *.order
@@ -49,6 +50,11 @@ modules.builtin
 # Debian directory (make deb-pkg)
 #
 /debian/
+
+#
+# Output directory
+#
+/output/
 
 #
 # git files that we don't want to ignore even it they are dot-files
