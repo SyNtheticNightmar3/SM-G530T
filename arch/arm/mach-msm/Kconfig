@@ -1513,6 +1513,7 @@ config TIMA_LOG
        default n
        help
          TIMA Log dumping support
+
 config KRAIT_REGULATOR
 	bool "Support Kraits powered via ganged regulators in the pmic"
 	help
