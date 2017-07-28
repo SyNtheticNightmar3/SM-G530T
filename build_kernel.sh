@@ -30,6 +30,7 @@ BOARD_KERNEL_TAGS_OFFSET=0x01E00000
 BOARD_RAMDISK_OFFSET=0x02000000
 BOARD_KERNEL_CMDLINE="console=ttyHSL0,115200,n8 androidboot.console=ttyHSL0 androidboot.hardware=qcom user_debug=31 msm_rtb.filter=0x3F ehci-hcd.park=3 androidboot.bootdevice=7824900.sdhci"
 KERNEL_ZIMG=output/arch/arm/boot/zImage
+CDATE=`date "+%Y-%m-%d"`
 
 FUNC_BUILD_DTIMAGE_TARGET()
 {
@@ -87,7 +88,9 @@ FUNC_MKBOOTIMG()
         echo -n "SEANDROIDENFORCE" >> output/boot.img
 
 	cd output
-	tar cvf boot_fortuna-tmo.tar.md5 boot.img
+	tar -H ustar -c boot.img > boot_fortuna-tmo_$CDATE.tar
+	md5sum -t boot_fortuna-tmo_$CDATE.tar >> boot_fortuna-tmo_$CDATE.tar
+	mv boot_fortuna-tmo_$CDATE.tar boot_fortuna-tmo_$CDATE.tar.md5
 	cd ..
 
 	echo ""
@@ -104,6 +107,11 @@ if [ "$1" = "-c" ]; then
     rm -rf build.log
     echo "Cleaning out dir..."
     rm -rf output
+elif [ "$1" = "-pc" ]; then
+    echo "Clearing packaged content..."
+    rm -rf $INSTALLED_DTIMAGE_TARGET
+    rm -rf output/boot.img
+    rm -rf output/boot_fortuna-tmo*.tar.md5
 else
     mkdir output
     FUNC_RM_DTB
@@ -117,7 +125,7 @@ else
         if [ -e output/arch/arm/boot/zImage ]; then
             FUNC_BUILD_DTIMAGE_TARGET
             FUNC_MKBOOTIMG
-            echo "Done: output/boot_fortuna-tmo.tar.md5"
+            echo "Done: output/boot_fortuna-tmo_$CDATE.tar.md5"
         else
             echo "Something went wrong. zImage not found."
         fi
