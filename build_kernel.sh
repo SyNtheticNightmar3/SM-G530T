@@ -10,21 +10,94 @@ ccache -M 2G
 
 # For CodeBench caching, arm-none-*eabi- must be called explicitly from $PATH.
 export ARCH=arm
-export CROSS_COMPILE="ccache arm-linux-gnueabi-"
+export CROSS_COMPILE="ccache $HOME/tc/arm-eabi-4.8/bin/arm-eabi-"
 
-while getopts ":c" opt #:p for packaging
-do
-case "$opt" in
-        c)
-             CLEAN=true;;
-#        p)
-#             PACKAGE=true;;
-        *)
-             break;;
-    esac
-done
+FUNC_RM_DTB()
+{
+	if ! [ -d output/arch/arm/boot/dts ] ; then
+		echo "no directory : "output/arch/arm/boot/dts""
+	else
+		echo "rm files in : "output/arch/arm/boot/dts/*.dtb""
+		rm output/arch/arm/boot/dts/*.dtb
+	fi
+}
 
-if [ "$CLEAN" = "true" ]; then
+INSTALLED_DTIMAGE_TARGET=output/arch/arm/boot/dt.img
+DTBTOOL=tools/dtbTool
+BOARD_KERNEL_BASE=0x80000000
+BOARD_KERNEL_PAGESIZE=2048
+BOARD_KERNEL_TAGS_OFFSET=0x01E00000
+BOARD_RAMDISK_OFFSET=0x02000000
+BOARD_KERNEL_CMDLINE="console=ttyHSL0,115200,n8 androidboot.console=ttyHSL0 androidboot.hardware=qcom user_debug=31 msm_rtb.filter=0x3F ehci-hcd.park=3 androidboot.bootdevice=7824900.sdhci"
+KERNEL_ZIMG=output/arch/arm/boot/zImage
+
+FUNC_BUILD_DTIMAGE_TARGET()
+{
+	echo ""
+	echo "================================="
+	echo "START : FUNC_BUILD_DTIMAGE_TARGET"
+	echo "================================="
+	echo ""
+	echo "DT image target : $INSTALLED_DTIMAGE_TARGET"
+
+	echo "$DTBTOOL -o $INSTALLED_DTIMAGE_TARGET -s $BOARD_KERNEL_PAGESIZE \
+		-p output/scripts/dtc/ output/arch/arm/boot/dts/"
+		$DTBTOOL -o $INSTALLED_DTIMAGE_TARGET -s $BOARD_KERNEL_PAGESIZE \
+		-p output/scripts/dtc/ output/arch/arm/boot/dts/
+
+	chmod a+r $INSTALLED_DTIMAGE_TARGET
+
+	echo ""
+	echo "================================="
+	echo "END   : FUNC_BUILD_DTIMAGE_TARGET"
+	echo "================================="
+	echo ""
+}
+
+FUNC_MKBOOTIMG()
+{
+	echo ""
+	echo "==================================="
+	echo "START : FUNC_MKBOOTIMG"
+	echo "==================================="
+	echo ""
+	MKBOOTIMGTOOL=tools/mkbootimg
+
+	echo "Making boot.img ..."
+	echo "	$MKBOOTIMGTOOL --kernel $KERNEL_ZIMG \
+			--ramdisk tools/initramfs.cpio.gz \
+			--output output/boot.img \
+			--cmdline "$BOARD_KERNEL_CMDLINE" \
+			--base $BOARD_KERNEL_BASE \
+			--pagesize $BOARD_KERNEL_PAGESIZE \
+			--ramdisk_offset $BOARD_RAMDISK_OFFSET \
+			--tags_offset $BOARD_KERNEL_TAGS_OFFSET \
+			--dt $INSTALLED_DTIMAGE_TARGET"
+
+	$MKBOOTIMGTOOL --kernel $KERNEL_ZIMG \
+			--ramdisk tools/initramfs.cpio.gz \
+			--output output/boot.img \
+			--cmdline "$BOARD_KERNEL_CMDLINE" \
+			--base $BOARD_KERNEL_BASE \
+			--pagesize $BOARD_KERNEL_PAGESIZE \
+			--ramdisk_offset $BOARD_RAMDISK_OFFSET \
+			--tags_offset $BOARD_KERNEL_TAGS_OFFSET \
+			--dt $INSTALLED_DTIMAGE_TARGET
+
+        echo -n "SEANDROIDENFORCE" >> output/boot.img
+
+	cd output
+	tar cvf boot_fortuna-tmo.tar.md5 boot.img
+	cd ..
+
+	echo ""
+	echo "==================================="
+	echo "END   : FUNC_MKBOOTIMG"
+	echo "==================================="
+	echo ""
+}
+
+if [ "$1" = "-c" ]; then
     echo "Making clean..."
     make clean
     echo "Removing build log..."
@@ -33,30 +106,21 @@ if [ "$CLEAN" = "true" ]; then
     rm -rf output
 else
     mkdir output
+    FUNC_RM_DTB
     make -C $(pwd) O=output msm8916_sec_defconfig VARIANT_DEFCONFIG=msm8916_sec_fortuna_tmo_defconfig SELINUX_DEFCONFIG=selinux_defconfig;
 
-    time logsave build.log make -C $(pwd) O=output -j4;
+    BUILD_JOB_NUMBER=`grep processor /proc/cpuinfo|wc -l`
+    time logsave build.log make -C $(pwd) O=output -j$BUILD_JOB_NUMBER;
 
-#    if [ "$PACKAGE" = "true" ]; then
-#        echo ""
-#        if [ -e arch/arm/boot/zImage ]; then
-#            echo "Copying packaging components..."
-#           mkdir -p out/system/lib/modules/
-#           cp -a $(find . -name *.ko -print) out/system/lib/modules/
-#            mkdir out
-#            cp -R package/* out/
-#            cp arch/arm/boot/zImage out/kernel/
-#            echo "Packaging..."
-#            cd out
-#            cdate=`date "+%Y-%m-%d"`
-#            zfile=ED-E-kernel-flo-$cdate.zip
-#            zip -r $zfile . -x *.zip
-#            rm -rf kernel META-INF
-#            cd ..
-#            echo " ZIPFILE: out/$zfile"
-#        else
-#            echo "Something went wrong. zImage not found."
-#        fi
-#    fi
+    if [ "$1" = "-p" ]; then
+        echo ""
+        if [ -e output/arch/arm/boot/zImage ]; then
+            FUNC_BUILD_DTIMAGE_TARGET
+            FUNC_MKBOOTIMG
+            echo "Done: output/boot_fortuna-tmo.tar.md5"
+        else
+            echo "Something went wrong. zImage not found."
+        fi
+    fi
 fi
 
