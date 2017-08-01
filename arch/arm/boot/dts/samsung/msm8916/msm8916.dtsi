@@ -561,7 +561,7 @@
 		compatible = "qcom,android-usb";
 		reg = <0x086000c8 0xc8>;
 		qcom,pm-qos-latency = <2 1001 12701>;
-		qcom,streaming-func = "mtp", "ptp";
+		qcom,streaming-func = "rndis", "mtp", "ptp";
 		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
 	};
 
@@ -654,7 +654,7 @@
 
 		qcom,bus-width = <8>;
 
-		qcom,cpu-dma-latency-us = <200>;
+		qcom,cpu-dma-latency-us = <2 115 200>;
 		qcom,msm-bus,name = "sdhc1";
 		qcom,msm-bus,num-cases = <8>;
 		qcom,msm-bus,num-paths = <1>;
