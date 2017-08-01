@@ -48,6 +48,8 @@ int msm_isp_update_axi_stream(struct vfe_device *vfe_dev, void *arg);
 void msm_isp_axi_cfg_update(struct vfe_device *vfe_dev);
 
 void msm_isp_axi_stream_update(struct vfe_device *vfe_dev);
+int msm_isp_user_buf_done(struct vfe_device *vfe_dev,
+	struct msm_isp_event_data *buf_cmd);
 
 void msm_isp_update_framedrop_reg(struct vfe_device *vfe_dev);
 void msm_isp_sof_notify(struct vfe_device *vfe_dev,

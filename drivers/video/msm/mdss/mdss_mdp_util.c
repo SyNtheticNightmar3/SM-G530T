@@ -724,7 +724,7 @@ void mdss_mdp_data_free(struct mdss_mdp_data *data)
 int mdss_mdp_calc_phase_step(u32 src, u32 dst, u32 *out_phase)
 {
 	u32 unit, residue, result;
-        struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
 
 	if (src == 0 || dst == 0)
 		return -EINVAL;

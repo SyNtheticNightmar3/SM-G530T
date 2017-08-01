@@ -176,7 +176,6 @@ struct sdhci_host {
  * calculated based on the base clock.
  */
 #define SDHCI_QUIRK2_DIVIDE_TOUT_BY_4 (1 << 11)
-
 /*
  * Some SDHC controllers are unable to handle data-end bit error in
  * 1-bit mode of SDIO.
@@ -188,9 +187,8 @@ struct sdhci_host {
  * the bounce buffer logic when preparing data
  */
 #define SDHCI_QUIRK2_ADMA_SKIP_DATA_ALIGNMENT             (1<<13)
-
 /* Use reset workaround in case sdhci reset timeouts */
-#define SDHCI_QUIRK2_USE_RESET_WORKAROUND                (1<<15)
+#define SDHCI_QUIRK2_USE_RESET_WORKAROUND (1 << 14)
 
 	int irq;		/* Device IRQ */
 	void __iomem *ioaddr;	/* Mapped address */
@@ -302,6 +300,7 @@ struct sdhci_host {
 	int reset_wa_applied; /* reset workaround status */
 	ktime_t reset_wa_t; /* time when the reset workaround is applied */
 	int reset_wa_cnt; /* total number of times workaround is used */
+
 	unsigned long private[0] ____cacheline_aligned;
 };
 #endif /* LINUX_MMC_SDHCI_H */

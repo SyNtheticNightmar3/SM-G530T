@@ -136,6 +136,7 @@ static int msm_isp_enable_debugfs(struct msm_isp_statistics *stats)
 		return -ENOMEM;
 	return 0;
 }
+
 static long msm_isp_subdev_do_ioctl(
 	struct file *file, unsigned int cmd, void *arg)
 {

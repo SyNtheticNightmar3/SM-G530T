@@ -20,6 +20,9 @@
 #define MSM_CAM_V4L2_IOCTL_NOTIFY_MODULE_STATUS \
 	_IOW('V', BASE_VIDIOC_PRIVATE + 34, struct v4l2_event)
 
+#define MSM_CAM_V4L2_IOCTL_NOTIFY_FREEZE \
+	_IOW('V', BASE_VIDIOC_PRIVATE + 34, struct msm_v4l2_event_data)
+
 #define QCAMERA_DEVICE_GROUP_ID	1
 #define QCAMERA_VNODE_GROUP_ID	2
 #define MSM_CAMERA_NAME			"msm_camera"
