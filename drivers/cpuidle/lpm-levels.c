@@ -229,11 +229,13 @@ int set_l2_mode(struct low_power_ops *ops, int mode, bool notify_rpm)
 		break;
 	}
 
+#ifdef CONFIG_CX_VOTE_TURBO
 	/* Do not program L2 SPM enable bit. This will be set by TZ */
 	if (lpm_wa_get_skip_l2_spm())
 		rc = msm_spm_config_low_power_mode_addr(ops->spm, lpm,
 							true);
 	else
+#endif
 		rc = msm_spm_config_low_power_mode(ops->spm, lpm, true);
 
 	if (rc)
