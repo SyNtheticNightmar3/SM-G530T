@@ -82,7 +82,6 @@ struct csiphy_device {
 
 	int32_t ref_count;
 	uint16_t lane_mask[MAX_CSIPHY];
-	uint32_t csiphy_sof_freeze;
 };
 
 #define VIDIOC_MSM_CSIPHY_RELEASE \
