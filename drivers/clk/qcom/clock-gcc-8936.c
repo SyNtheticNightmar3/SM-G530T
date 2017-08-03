@@ -274,6 +274,7 @@ static void __iomem *virt_dbgbase;
 #define BIMC_GPU_CBCR					0x31040
 #define SNOC_QOSGEN					0x2601C
 #define GCC_SPARE3_REG					0x7E004
+#define SNOC_QOSGEN					0x2601C
 
 #define APCS_CCI_PLL_MODE				0x00000
 #define APCS_CCI_PLL_L_VAL				0x00004
