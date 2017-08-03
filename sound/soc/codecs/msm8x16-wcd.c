@@ -4080,7 +4080,7 @@ static const struct msm8x16_wcd_reg_mask_val
 #ifdef CONFIG_SAMSUNG_JACK
 	{MSM8X16_WCD_A_ANALOG_RX_COM_OCP_CTL, 0xFF, 0xDF}, // fix ESD mute problem
 #else
-	{MSM8X16_WCD_A_ANALOG_RX_COM_OCP_CTL, 0xFF, 0xD1},
+	{MSM8X16_WCD_A_ANALOG_RX_COM_OCP_CTL, 0xFF, 0x12},
 #endif
 	{MSM8X16_WCD_A_ANALOG_RX_COM_OCP_COUNT, 0xFF, 0xFF},
 };

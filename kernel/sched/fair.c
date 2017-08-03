@@ -2168,8 +2168,8 @@ static inline int invalid_value_freq_input(unsigned int *data)
 }
 #endif
 
- static inline int invalid_value(unsigned int *data)
- {
+static inline int invalid_value(unsigned int *data)
+{
 	unsigned int val = *data;
 
 	if (data == &sysctl_sched_ravg_hist_size)
@@ -2181,7 +2181,7 @@ static inline int invalid_value_freq_input(unsigned int *data)
 		return !(val == 0 || val == 1);
 
 	return invalid_value_freq_input(data);
- }
+}
 
 /*
  * Handle "atomic" update of sysctl_sched_window_stats_policy,
@@ -2245,7 +2245,6 @@ int sched_hmp_proc_update_handler(struct ctl_table *table, int write,
 
 	if (write && (old_val == *data))
 		goto done;
-
 
 	if (data == (unsigned int *)&sysctl_sched_upmigrate_min_nice)
 		update_min_nice = 1;

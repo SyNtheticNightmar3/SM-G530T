@@ -1036,10 +1036,15 @@ int sps_bam_pipe_disconnect(struct sps_bam *dev, u32 pipe_index)
 			bam_pipe_exit(dev->base, pipe_index, dev->props.ee);
 		if (pipe->sys.desc_cache != NULL) {
 			u32 size = pipe->num_descs * sizeof(void *);
-			if (pipe->desc_size + size <= PAGE_SIZE)
-				kfree(pipe->sys.desc_cache);
-			else
+			if (pipe->desc_size + size <= PAGE_SIZE) {
+				if (dev->props.options & SPS_BAM_HOLD_MEM)
+					memset(pipe->sys.desc_cache, 0,
+						pipe->desc_size + size);
+				else
+					kfree(pipe->sys.desc_cache);
+			} else {
 				vfree(pipe->sys.desc_cache);
+			}
 			pipe->sys.desc_cache = NULL;
 		}
 		dev->pipes[pipe_index] = BAM_PIPE_UNASSIGNED;
@@ -1166,10 +1171,19 @@ int sps_bam_pipe_set_params(struct sps_bam *dev, u32 pipe_index, u32 options)
 		size = pipe->num_descs * sizeof(void *);
 
 		if (pipe->desc_size + size <= PAGE_SIZE) {
-			if (dev->props.options & SPS_BAM_ATMC_MEM) {
-				pipe->sys.desc_cache =
-					kzalloc(pipe->desc_size + size,
-							GFP_ATOMIC);
+			if ((dev->props.options &
+						SPS_BAM_HOLD_MEM)) {
+				if (dev->desc_cache_pointers[pipe_index]) {
+					pipe->sys.desc_cache =
+						dev->desc_cache_pointers
+							[pipe_index];
+				} else {
+					pipe->sys.desc_cache =
+						kzalloc(pipe->desc_size + size,
+								GFP_KERNEL);
+					dev->desc_cache_pointers[pipe_index] =
+							pipe->sys.desc_cache;
+				}
 				atmc_enbl = true;
 			} else {
 				pipe->sys.desc_cache =
@@ -1188,9 +1202,8 @@ int sps_bam_pipe_set_params(struct sps_bam *dev, u32 pipe_index, u32 options)
 				vmalloc(pipe->desc_size + size);
 
 			if (pipe->sys.desc_cache == NULL) {
-				SPS_ERR(
-					"sps:No memory for pipe %d of BAM %pa\n",
-					pipe_index, BAM_ID(dev));
+				SPS_ERR("sps:No memory for pipe%d of BAM %pa\n",
+						pipe_index, BAM_ID(dev));
 				return -ENOMEM;
 			}
 
