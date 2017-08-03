@@ -1349,20 +1349,20 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 			complete(&mfd->no_update.comp);
 
 			mfd->op_enable = false;
-			mutex_lock(&mfd->bl_lock);
 			if (mdss_panel_is_power_off(req_power_state)) {
 				/* Stop Display thread */
 				if (mfd->disp_thread)
 					mdss_fb_stop_disp_thread(mfd);
-				if( !mfd->panel_info->panel_dead){
+				mutex_lock(&mfd->bl_lock);
+				if( !mfd->panel_info->panel_dead) {
 #if !defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 					mdss_fb_set_backlight(mfd, 0);
 #endif
 					mfd->bl_updated = 0;
 				}
+				mutex_unlock(&mfd->bl_lock);
 			}
 			mfd->panel_power_state = req_power_state;
-			mutex_unlock(&mfd->bl_lock);
 
 			ret = mfd->mdp.off_fnc(mfd);
 			if (ret)
