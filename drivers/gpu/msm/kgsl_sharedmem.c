@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2014,2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -624,6 +624,10 @@ _kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
 
 	memdesc->pagetable = pagetable;
 	memdesc->ops = &kgsl_page_alloc_ops;
+
+	/* Check for integer overflow */
+	if (sglen_alloc && (sizeof(struct scatterlist) > INT_MAX / sglen_alloc))
+		return -EINVAL;
 
 	memdesc->sg = kgsl_malloc(sglen_alloc * sizeof(struct scatterlist));
 

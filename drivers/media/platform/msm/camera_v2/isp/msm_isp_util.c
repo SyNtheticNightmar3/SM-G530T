@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014,2016 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1360,8 +1360,7 @@ static inline void msm_isp_reset_burst_count(
 		stream_info = &axi_data->stream_info[i];
 		if (stream_info->state != ACTIVE)
 			continue;
-		if (stream_info->stream_type == BURST_STREAM &&
-			stream_info->num_burst_capture != 0) {
+		if (stream_info->num_burst_capture != 0) {
 			framedrop_info.axi_stream_handle = i;
 			framedrop_info.burst_count =
 				stream_info->num_burst_capture;

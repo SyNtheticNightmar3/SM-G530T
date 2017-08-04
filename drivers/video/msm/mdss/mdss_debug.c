@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2014, 2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -377,7 +377,7 @@ static ssize_t mdss_debug_perf_mode_write(struct file *file,
 	if (copy_from_user(buf, user_buf, count))
 		return -EFAULT;
 
-	buf[count] = 0;		/* end of string */
+	buf[count] = 0;	/* end of string */
 
 	if (sscanf(buf, "%d", &perf_mode) != 1)
 		return -EFAULT;
@@ -514,7 +514,7 @@ static ssize_t mdss_debug_perf_panic_write(struct file *file,
 	if (copy_from_user(buf, user_buf, count))
 		return -EFAULT;
 
-	buf[count] = 0; 	/* end of string */
+	buf[count] = 0;	/* end of string */
 
 	if (sscanf(buf, "%d", &disable_panic) != 1)
 		return -EFAULT;

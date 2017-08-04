@@ -304,7 +304,7 @@ EXPORT_SYMBOL(kgsl_mem_entry_destroy);
  * @returns - 0 on success else error code
  *
  * This function should be called with processes memory spinlock held
- */
+*/
 static int
 kgsl_mem_entry_track_gpuaddr(struct kgsl_process_private *process,
 				struct kgsl_mem_entry *entry)
@@ -2922,7 +2922,7 @@ static int kgsl_setup_useraddr(struct kgsl_mem_entry *entry,
 	up_read(&current->mm->mmap_sem);
 
 	if (!IS_ERR_OR_NULL(dmabuf)) {
-		int ret = kgsl_setup_dma_buf(entry, pagetable, device, dmabuf);
+		ret = kgsl_setup_dma_buf(entry, pagetable, device, dmabuf);
 		if (ret)
 			dma_buf_put(dmabuf);
 		else {
@@ -3235,7 +3235,6 @@ long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 	trace_kgsl_mem_map(entry, param->fd);
 
 	kgsl_mem_entry_commit_process(private, entry);
-
 	return result;
 
 error_attach:
@@ -3578,6 +3577,7 @@ long kgsl_ioctl_gpumem_alloc(struct kgsl_device_private *dev_priv,
 	param->gpuaddr = entry->memdesc.gpuaddr;
 	param->size = entry->memdesc.size;
 	param->flags = entry->memdesc.flags;
+
 	kgsl_mem_entry_commit_process(private, entry);
 	return result;
 err:
@@ -3619,6 +3619,7 @@ long kgsl_ioctl_gpumem_alloc_id(struct kgsl_device_private *dev_priv,
 	param->size = entry->memdesc.size;
 	param->mmapsize = kgsl_memdesc_mmapsize(&entry->memdesc);
 	param->gpuaddr = entry->memdesc.gpuaddr;
+
 	kgsl_mem_entry_commit_process(private, entry);
 	return result;
 err:
