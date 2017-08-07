@@ -4845,9 +4845,10 @@ find_idlest_cpu(struct sched_group *group, struct task_struct *p, int this_cpu)
 
 	/* Traverse only the allowed CPUs */
 	for_each_cpu_and(i, sched_group_cpus(group), tsk_cpus_allowed(p)) {
-		load = weighted_cpuload(i);
 #ifdef CONFIG_NO_HZ_COMMON
-		if (idle_cpu(i)) {
+		struct rq *rq = cpu_rq(i);
+		int cstate = rq->cstate;
+		if (idle_cpu(i) && !cstate) {
 			ts = &per_cpu(tick_cpu_sched, i);
 			if (ts->inidle && !ts->idle_active) {
 				/* idle cpu doing irq */
@@ -4856,6 +4857,7 @@ find_idlest_cpu(struct sched_group *group, struct task_struct *p, int this_cpu)
 			}
 		}
 #endif
+		load = weighted_cpuload(i);
 		if (load < min_load || (load == min_load && i == this_cpu)) {
 			min_load = load;
 			idlest = i;
