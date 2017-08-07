@@ -404,7 +404,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 		&per_cpu(cpuinfo, data);
 	struct cpufreq_interactive_tunables *tunables =
 		pcpu->policy->governor_data;
-	unsigned int new_freq;
+	unsigned int new_freq, scaled_freq, load_freq;
 	unsigned int loadadjfreq;
 	unsigned int index;
 	unsigned long flags;
@@ -464,18 +464,12 @@ static void cpufreq_interactive_timer(unsigned long data)
 	if(tunables->use_sched_load)
 		if(cpu_load > 100) cpu_load = 100;
 
-	if (cpu_load >= tunables->go_hispeed_load || boosted) {
-		if (pcpu->policy->cur < tunables->hispeed_freq) {
-			new_freq = tunables->hispeed_freq;
-		} else {
-			new_freq = choose_freq(pcpu, loadadjfreq);
+	scaled_freq = pcpu->policy->max * cpu_load / 100;
+	load_freq = choose_freq(pcpu, loadadjfreq);
+	new_freq = min(load_freq, scaled_freq);
 
-			if (new_freq < tunables->hispeed_freq)
-				new_freq = tunables->hispeed_freq;
-		}
-	} else {
-		new_freq = choose_freq(pcpu, loadadjfreq);
-	}
+	if (cpu_load >= tunables->go_hispeed_load || boosted)
+		new_freq = max(new_freq, tunables->hispeed_freq);
 
 	if (pcpu->policy->cur >= tunables->hispeed_freq &&
 	    new_freq > pcpu->policy->cur &&
