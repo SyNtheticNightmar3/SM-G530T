@@ -496,8 +496,9 @@ static void cpufreq_interactive_timer(unsigned long data)
 	load_freq = choose_freq(pcpu, loadadjfreq);
 	new_freq = min(load_freq, scaled_freq);
 
-	if (cpu_load >= tunables->go_hispeed_load || tunables->boosted)
-		new_freq = max(new_freq, tunables->hispeed_freq);
+	if ((cpu_load >= tunables->go_hispeed_load || tunables->boosted) &&
+	    new_freq <= tunables->hispeed_freq)
+		new_freq = tunables->hispeed_freq;
 
 	if (pcpu->policy->cur >= tunables->hispeed_freq &&
 	    new_freq > pcpu->policy->cur &&
