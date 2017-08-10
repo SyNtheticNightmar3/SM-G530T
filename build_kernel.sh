@@ -65,6 +65,9 @@ FUNC_MKBOOTIMG()
 	MKBOOTIMGTOOL=tools/mkbootimg
 	MKRAMDISKTOOL=tools/repack_ramdisk
 
+	mkdir -p tools/ramdisk/system/lib/modules/
+	cp -a $(find . -name *.ko -print) tools/ramdisk/system/lib/modules/
+
 	echo "Making ramdisk ..."
 	echo "	$MKRAMDISKTOOL tools/ramdisk ../output/initramfs.cpio.gz"
 
@@ -119,6 +122,7 @@ elif [ "$1" = "-pc" ]; then
     rm -rf output/initramfs.cpio.gz
     rm -rf output/boot.img
     rm -rf output/boot_fortuna-tmo*.tar.md5
+    rm -rf tools/ramdisk/system/lib
 else
     mkdir output
     FUNC_RM_DTB
