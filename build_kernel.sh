@@ -63,10 +63,16 @@ FUNC_MKBOOTIMG()
 	echo "==================================="
 	echo ""
 	MKBOOTIMGTOOL=tools/mkbootimg
+	MKRAMDISKTOOL=tools/repack_ramdisk
+
+	echo "Making ramdisk ..."
+	echo "	$MKRAMDISKTOOL tools/ramdisk ../output/initramfs.cpio.gz"
+
+	$MKRAMDISKTOOL tools/ramdisk ../output/initramfs.cpio.gz
 
 	echo "Making boot.img ..."
 	echo "	$MKBOOTIMGTOOL --kernel $KERNEL_ZIMG \
-			--ramdisk tools/initramfs.cpio.gz \
+			--ramdisk output/initramfs.cpio.gz \
 			--output output/boot.img \
 			--cmdline "$BOARD_KERNEL_CMDLINE" \
 			--base $BOARD_KERNEL_BASE \
@@ -76,7 +82,7 @@ FUNC_MKBOOTIMG()
 			--dt $INSTALLED_DTIMAGE_TARGET"
 
 	$MKBOOTIMGTOOL --kernel $KERNEL_ZIMG \
-			--ramdisk tools/initramfs.cpio.gz \
+			--ramdisk output/initramfs.cpio.gz \
 			--output output/boot.img \
 			--cmdline "$BOARD_KERNEL_CMDLINE" \
 			--base $BOARD_KERNEL_BASE \
@@ -110,6 +116,7 @@ if [ "$1" = "-c" ]; then
 elif [ "$1" = "-pc" ]; then
     echo "Clearing packaged content..."
     rm -rf $INSTALLED_DTIMAGE_TARGET
+    rm -rf output/initramfs.cpio.gz
     rm -rf output/boot.img
     rm -rf output/boot_fortuna-tmo*.tar.md5
 else
