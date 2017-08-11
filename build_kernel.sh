@@ -97,9 +97,9 @@ FUNC_MKBOOTIMG()
         echo -n "SEANDROIDENFORCE" >> output/boot.img
 
 	cd output
-	tar -H ustar -c boot.img > boot_fortuna-tmo_$CDATE.tar
-	md5sum -t boot_fortuna-tmo_$CDATE.tar >> boot_fortuna-tmo_$CDATE.tar
-	mv boot_fortuna-tmo_$CDATE.tar boot_fortuna-tmo_$CDATE.tar.md5
+	tar -H ustar -c boot.img > boot_axgprime-tmo_$CDATE.tar
+	md5sum -t boot_axgprime-tmo_$CDATE.tar >> boot_axgprime-tmo_$CDATE.tar
+	mv boot_axgprime-tmo_$CDATE.tar boot_axgprime-tmo_$CDATE.tar.md5
 	cd ..
 
 	echo ""
@@ -121,7 +121,7 @@ elif [ "$1" = "-pc" ]; then
     rm -rf $INSTALLED_DTIMAGE_TARGET
     rm -rf output/initramfs.cpio.gz
     rm -rf output/boot.img
-    rm -rf output/boot_fortuna-tmo*.tar.md5
+    rm -rf output/boot_axgprime-tmo*.tar.md5
     rm -rf tools/ramdisk/system/lib
 else
     mkdir output
@@ -136,7 +136,7 @@ else
         if [ -e output/arch/arm/boot/zImage ]; then
             FUNC_BUILD_DTIMAGE_TARGET
             FUNC_MKBOOTIMG
-            echo "Done: output/boot_fortuna-tmo_$CDATE.tar.md5"
+            echo "Done: output/boot_axgprime-tmo_$CDATE.tar.md5"
         else
             echo "Something went wrong. zImage not found."
         fi
