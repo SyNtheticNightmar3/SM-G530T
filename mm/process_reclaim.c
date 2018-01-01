@@ -91,7 +91,7 @@ static int test_task_flag(struct task_struct *p, int flag)
 	do {
 		task_lock(t);
 		if (test_tsk_thread_flag(t, flag)) {
-			rcu_read_unlock();
+			task_unlock(t);
 			return 1;
 		}
 		task_unlock(t);
