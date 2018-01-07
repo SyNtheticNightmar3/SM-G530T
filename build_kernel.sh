@@ -116,9 +116,10 @@ if [ "$1" = "-c" ]; then
     rm -rf build.log
     echo "Cleaning out dir..."
     rm -rf output
+    echo "Cleaning up device tree image..."
+    rm -rf $INSTALLED_DTIMAGE_TARGET
 elif [ "$1" = "-pc" ]; then
     echo "Clearing packaged content..."
-    rm -rf $INSTALLED_DTIMAGE_TARGET
     rm -rf output/initramfs.cpio.gz
     rm -rf output/boot.img
     rm -rf output/boot_axgprime-tmo*.tar.md5
@@ -130,11 +131,11 @@ else
 
     BUILD_JOB_NUMBER=`grep processor /proc/cpuinfo|wc -l`
     time logsave build.log make -C $(pwd) O=output -j$BUILD_JOB_NUMBER;
+    FUNC_BUILD_DTIMAGE_TARGET
 
     if [ "$1" = "-p" ]; then
         echo ""
         if [ -e output/arch/arm/boot/zImage ]; then
-            FUNC_BUILD_DTIMAGE_TARGET
             FUNC_MKBOOTIMG
             echo "Done: output/boot_axgprime-tmo_$CDATE.tar.md5"
         else
