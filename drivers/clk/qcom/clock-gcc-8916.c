@@ -223,7 +223,6 @@ static void __iomem *virt_bases[N_BASES];
 #define CAMSS_AHB_CMD_RCGR				0x5A000
 #define BIMC_GFX_CBCR					0x31024
 #define BIMC_GPU_CBCR					0x31040
-#define SNOC_QOSGEN					0x2601C
 
 #define APCS_SH_PLL_MODE				0x00000
 #define APCS_SH_PLL_L_VAL				0x00004
