@@ -20,12 +20,9 @@
 #include <linux/init.h>
 #include <linux/uaccess.h>
 #include <linux/user.h>
-<<<<<<< HEAD
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
-=======
 #include <linux/export.h>
->>>>>>> 73c132c... ARM: add support for kernel mode NEON
 
 #include <asm/cp15.h>
 #include <asm/cputype.h>
