@@ -2,6 +2,9 @@
 # Arch-specific CryptoAPI modules.
 #
 
+KBUILD_AFLAGS	:=$(KBUILD_AFLAGS:-msoft-float=-Wa,-mfpu=crypto-neon-fp-armv8 -mfloat-abi=soft -frounding-math -fsignaling-nans -fsingle-precision-constant)
+KBUILD_CFLAGS	+=-frounding-math -fsignaling-nans -fsingle-precision-constant
+
 obj-$(CONFIG_CRYPTO_AES_ARM) += aes-arm.o
 obj-$(CONFIG_CRYPTO_AES_ARM_BS) += aes-arm-bs.o
 obj-$(CONFIG_CRYPTO_SHA1_ARM) += sha1-arm.o
