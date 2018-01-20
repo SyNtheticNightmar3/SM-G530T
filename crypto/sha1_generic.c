@@ -35,7 +35,7 @@ static void sha1_generic_block_fn(struct sha1_state *sst, u8 const *src,
 		sha_transform(sst->state, src, temp);
 		src += SHA1_BLOCK_SIZE;
 	}
-	memzero_explicit(temp, sizeof(temp));
+	memset(temp, 0, sizeof(temp));
 }
 
 int crypto_sha1_update(struct shash_desc *desc, const u8 *data,
