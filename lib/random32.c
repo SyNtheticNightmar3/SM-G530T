@@ -173,7 +173,7 @@ static int __init prandom_init(void)
 		struct rnd_state *state = &per_cpu(net_rand_state,i);
 
 #define LCG(x)	((x) * 69069U)	/* super-duper LCG */
-		state->s1 = __seed(LCG((i + jiffies) ^ random_get_entropy()), 2U);
+		state->s1 = __seed(LCG((i + jiffies) ^ get_cycles()), 2U);
 		state->s2 = __seed(LCG(state->s1),   8U);
 		state->s3 = __seed(LCG(state->s2),  16U);
 		state->s4 = __seed(LCG(state->s3), 128U);
