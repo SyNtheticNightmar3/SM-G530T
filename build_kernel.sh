@@ -55,58 +55,20 @@ FUNC_BUILD_DTIMAGE_TARGET()
 	echo ""
 }
 
-FUNC_MKBOOTIMG()
+FUNC_MKZIPFILE()
 {
-	echo ""
-	echo "==================================="
-	echo "START : FUNC_MKBOOTIMG"
-	echo "==================================="
-	echo ""
-	MKBOOTIMGTOOL=tools/mkbootimg
-	MKRAMDISKTOOL=tools/repack_ramdisk
-
-	mkdir -p tools/ramdisk/system/lib/modules/
-	cp -a $(find . -name *.ko -print) tools/ramdisk/system/lib/modules/
-
-	echo "Making ramdisk ..."
-	echo "	$MKRAMDISKTOOL tools/ramdisk ../output/initramfs.cpio.gz"
-
-	$MKRAMDISKTOOL tools/ramdisk ../output/initramfs.cpio.gz
-
-	echo "Making boot.img ..."
-	echo "	$MKBOOTIMGTOOL --kernel $KERNEL_ZIMG \
-			--ramdisk output/initramfs.cpio.gz \
-			--output output/boot.img \
-			--cmdline "$BOARD_KERNEL_CMDLINE" \
-			--base $BOARD_KERNEL_BASE \
-			--pagesize $BOARD_KERNEL_PAGESIZE \
-			--ramdisk_offset $BOARD_RAMDISK_OFFSET \
-			--tags_offset $BOARD_KERNEL_TAGS_OFFSET \
-			--dt $INSTALLED_DTIMAGE_TARGET"
-
-	$MKBOOTIMGTOOL --kernel $KERNEL_ZIMG \
-			--ramdisk output/initramfs.cpio.gz \
-			--output output/boot.img \
-			--cmdline "$BOARD_KERNEL_CMDLINE" \
-			--base $BOARD_KERNEL_BASE \
-			--pagesize $BOARD_KERNEL_PAGESIZE \
-			--ramdisk_offset $BOARD_RAMDISK_OFFSET \
-			--tags_offset $BOARD_KERNEL_TAGS_OFFSET \
-			--dt $INSTALLED_DTIMAGE_TARGET
-
-        echo -n "SEANDROIDENFORCE" >> output/boot.img
-
-	cd output
-	tar -H ustar -c boot.img > boot_axgprime-tmo_$CDATE.tar
-	md5sum -t boot_axgprime-tmo_$CDATE.tar >> boot_axgprime-tmo_$CDATE.tar
-	mv boot_axgprime-tmo_$CDATE.tar boot_axgprime-tmo_$CDATE.tar.md5
-	cd ..
-
-	echo ""
-	echo "==================================="
-	echo "END   : FUNC_MKBOOTIMG"
-	echo "==================================="
-	echo ""
+    echo "Copying packaging components..."
+    mkdir -p out/system/lib/modules/
+    cp -a $(find ./output -name *.ko -print) out/system/lib/modules/
+    cp -R package/* out/
+    cp output/arch/arm/boot/zImage out/tools/
+    cp output/arch/arm/boot/dt.img out/tools
+    echo "Packaging..."
+    cd out
+    zfile=axgprime-tmo_$CDATE.zip
+    zip -r $zfile .
+    cd ..
+    echo "ZIPFILE:  out/$zfile"
 }
 
 if [ "$1" = "-c" ]; then
@@ -118,12 +80,8 @@ if [ "$1" = "-c" ]; then
     rm -rf output
     echo "Cleaning up device tree image..."
     rm -rf $INSTALLED_DTIMAGE_TARGET
-elif [ "$1" = "-pc" ]; then
     echo "Clearing packaged content..."
-    rm -rf output/initramfs.cpio.gz
-    rm -rf output/boot.img
-    rm -rf output/boot_axgprime-tmo*.tar.md5
-    rm -rf tools/ramdisk/system/lib
+    rm -rf out
 else
     mkdir output
     FUNC_RM_DTB
@@ -136,8 +94,7 @@ else
     if [ "$1" = "-p" ]; then
         echo ""
         if [ -e output/arch/arm/boot/zImage ]; then
-            FUNC_MKBOOTIMG
-            echo "Done: output/boot_axgprime-tmo_$CDATE.tar.md5"
+            FUNC_MKZIPFILE
         else
             echo "Something went wrong. zImage not found."
         fi
