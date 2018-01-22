@@ -6,6 +6,7 @@ ui_print("Extracting flashing tools...");
 package_extract_dir("tools", "/tmp");
 set_perm(0, 0, 0777, "/tmp/mkbootimg");
 set_perm(0, 0, 0777, "/tmp/unpackbootimg");
+set_perm(0, 0, 0777, "/tmp/append.sh");
 set_perm(0, 0, 0777, "/tmp/flash_kernel.sh");
 set_progress(0.2);
 
@@ -18,6 +19,7 @@ mount("ext4", "EMMC", "/dev/block/bootdevice/by-name/system", "/system");
 package_extract_dir("system", "/system");
 ui_print("Setting permissions...");
 set_perm_recursive(0, 0, 0755, 0644, "/system/lib/modules");
+run_program("/tmp/append.sh");
 unmount("/system");
 set_progress(0.7);
 
@@ -25,6 +27,7 @@ ui_print("Cleaning up flashing tools...");
 delete("/tmp/boot.img");
 delete("/tmp/mkbootimg");
 delete("/tmp/unpackbootimg");
+delete("/tmp/append.sh");
 delete("/tmp/flash_kernel.sh");
 set_progress(0.9);
 
